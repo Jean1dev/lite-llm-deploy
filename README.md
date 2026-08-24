@@ -1,24 +1,27 @@
-# LiteLLM no Heroku
+# LiteLLM na Railway
 
-O deploy usa o stack `container` do Heroku. A cada push na branch `main`, o
-GitHub Actions envia o commit para o Heroku Git; o Heroku então constrói o
-`Dockerfile` definido em `heroku.yml` e inicia o processo `web`.
+Este repositório publica o LiteLLM como um serviço Docker na Railway. A Railway
+constrói o `Dockerfile`, fornece a porta do serviço pela variável `PORT` e
+executa o entrypoint de produção do LiteLLM.
 
-## Configuração inicial
+## Configuração na Railway
 
-1. Em **Settings > Secrets and variables > Actions**, cadastre como Repository
-   Secrets:
+Conecte o serviço a este repositório e selecione a branch `main`. Mantenha os
+segredos somente nas variables do serviço Railway. O LiteLLM espera, no mínimo:
 
-   - Secret `HEROKU_API_KEY`: chave da conta com acesso ao app.
-   - Secret `HEROKU_APP_NAME`: nome do app no Heroku.
+- `LITELLM_MASTER_KEY`: chave usada para autenticar no proxy.
+- `LITELLM_SALT_KEY`: salt permanente usado para criptografar dados no banco.
+- `DATABASE_URL`: URL de conexão com o PostgreSQL.
+- `REDIS_URL`: URL completa do Redis, incluindo TLS e credenciais quando
+  necessário, por exemplo `rediss://default:senha@host:6379`.
 
-2. Mantenha as configurações do LiteLLM somente nas Config Vars do Heroku. No
-   mínimo, o serviço espera `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`,
-   `DATABASE_URL` e `REDIS_URL`.
+Não use uma URL completa em `REDIS_HOST`. Se optar por variáveis separadas,
+configure `REDIS_HOST`, `REDIS_PORT`, `REDIS_USERNAME`, `REDIS_PASSWORD` e
+`REDIS_SSL=True` individualmente.
 
-Depois disso, qualquer push em `main` dispara o deploy. A pipeline configura o
-app com o stack `container` antes de enviar o código. Também é possível executar
-o workflow manualmente pela aba Actions.
+O cache de respostas é habilitado em `config.yaml`, com TTL padrão de 600
+segundos. O LiteLLM lê `REDIS_URL` diretamente do ambiente; ela não deve ser
+repetida em `cache_params`.
 
 ## Desenvolvimento local
 

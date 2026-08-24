@@ -2,6 +2,5 @@ litellm_settings:
   cache: true
   cache_params:
     type: redis
-    redis_url: os.environ/REDIS_URL
     ttl: 600
     namespace: litellm.response_cache
