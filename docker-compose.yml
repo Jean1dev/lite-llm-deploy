@@ -10,10 +10,48 @@
 services:
   litellm:
     image: docker.litellm.ai/berriai/litellm-database:latest
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
     ports:
       - "4000:4000"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
     environment:
-      LITELLM_MASTER_KEY: sk-1234
-      LITELLM_SALT_KEY: sk-XXXXXXXXXXXXXXXX
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-local-development}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-local-development-salt-change-me}
       DATABASE_URL: postgresql://litellm:litellm@db:5432/litellm
       STORE_MODEL_IN_DB: "True"
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: litellm
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
