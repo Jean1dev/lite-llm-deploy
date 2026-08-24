@@ -6,24 +6,19 @@ GitHub Actions envia o commit para o Heroku Git; o Heroku então constrói o
 
 ## Configuração inicial
 
-1. Configure uma única vez o stack do app:
-
-   ```sh
-   heroku stack:set container --app NOME_DO_APP
-   ```
-
-2. Em **Settings > Secrets and variables > Actions**, cadastre como Repository
+1. Em **Settings > Secrets and variables > Actions**, cadastre como Repository
    Secrets:
 
    - Secret `HEROKU_API_KEY`: chave da conta com acesso ao app.
    - Secret `HEROKU_APP_NAME`: nome do app no Heroku.
 
-3. Mantenha as configurações do LiteLLM somente nas Config Vars do Heroku. No
+2. Mantenha as configurações do LiteLLM somente nas Config Vars do Heroku. No
    mínimo, o serviço espera `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`,
    `DATABASE_URL` e `REDIS_URL`.
 
-Depois disso, qualquer push em `main` dispara o deploy. Também é possível
-executar o workflow manualmente pela aba Actions.
+Depois disso, qualquer push em `main` dispara o deploy. A pipeline configura o
+app com o stack `container` antes de enviar o código. Também é possível executar
+o workflow manualmente pela aba Actions.
 
 ## Desenvolvimento local
 
