@@ -17,7 +17,6 @@ jobs:
   deploy:
     name: Deploy production
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -27,7 +26,7 @@ jobs:
       - name: Push source to Heroku
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
-          HEROKU_APP_NAME: ${{ vars.HEROKU_APP_NAME }}
+          HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
         run: |
           test -n "$HEROKU_API_KEY" || { echo "Missing HEROKU_API_KEY secret"; exit 1; }
           test -n "$HEROKU_APP_NAME" || { echo "Missing HEROKU_APP_NAME variable"; exit 1; }
