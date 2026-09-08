@@ -23,6 +23,11 @@ O cache de respostas é habilitado em `config.yaml`, com TTL padrão de 600
 segundos. O LiteLLM lê `REDIS_URL` diretamente do ambiente; ela não deve ser
 repetida em `cache_params`.
 
+O proxy descarta parâmetros OpenAI que o provider de destino não aceita
+(`litellm_settings.drop_params`). Sem isso, clientes OpenAI-compatíveis
+(LangChain `ChatOpenAI`, SDK OpenAI) falham em modelos Anthropic ao enviar
+`presence_penalty` e `frequency_penalty`.
+
 ## Desenvolvimento local
 
 O `docker-compose.yml` inicia LiteLLM, PostgreSQL e Redis localmente:
