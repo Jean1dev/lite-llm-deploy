@@ -1,5 +1,7 @@
 litellm_settings:
   drop_params: true
+  additional_drop_params:
+    - top_p
   cache: true
   cache_params:
     type: redis

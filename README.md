@@ -28,6 +28,12 @@ O proxy descarta parâmetros OpenAI que o provider de destino não aceita
 (LangChain `ChatOpenAI`, SDK OpenAI) falham em modelos Anthropic ao enviar
 `presence_penalty` e `frequency_penalty`.
 
+O Claude 4.x recusa `temperature` e `top_p` juntos, e o `drop_params` não
+remove nenhum dos dois porque ambos são params suportados. O proxy também
+descarta `top_p` (`additional_drop_params`) e mantém `temperature`, o
+controle de sampling recomendado pela Anthropic. `top_p: 1` (default do
+ChatOpenAI) não altera o sampling.
+
 ## Desenvolvimento local
 
 O `docker-compose.yml` inicia LiteLLM, PostgreSQL e Redis localmente:
