@@ -1,0 +1,30 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug server",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/server",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PORT": "4000",
+        "LOG_LEVEL": "debug",
+        "MEMORY_LIMIT": "256MiB",
+        "DATABASE_URL": "postgres://diet:diet@localhost:5433/diet?sslmode=disable",
+        "OPENAI_API_KEY": "sk-dev-openai",
+        "ANTHROPIC_API_KEY": "sk-dev-anthropic",
+        "GEMINI_API_KEY": "sk-dev-gemini",
+        "MASTER_KEY": "sk-dev-master"
+      }
+    },
+    {
+      "name": "Debug current package",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${fileDirname}"
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: ["go", "run", "./cmd/server"]
+    volumes:
+      - .:/app
+      - go-cache:/cache
+    environment:
+      PORT: "4000"
+      LOG_LEVEL: debug
+      MEMORY_LIMIT: 256MiB
+      GOMEMLIMIT: 256MiB
+      DATABASE_URL: postgres://diet:diet@db:5432/diet?sslmode=disable
+      OPENAI_API_KEY: sk-dev-openai
+      ANTHROPIC_API_KEY: sk-dev-anthropic
+      GEMINI_API_KEY: sk-dev-gemini
+      MASTER_KEY: sk-dev-master
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: diet
+      POSTGRES_PASSWORD: diet
+      POSTGRES_DB: diet
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U diet -d diet"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  go-cache:
+  pgdata:

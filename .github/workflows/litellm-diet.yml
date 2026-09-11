@@ -1,0 +1,72 @@
+name: litellm-diet
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "litellm-diet/**"
+      - ".github/workflows/litellm-diet.yml"
+  pull_request:
+    paths:
+      - "litellm-diet/**"
+      - ".github/workflows/litellm-diet.yml"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: litellm-diet
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d app"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://app:app@localhost:5432/app?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: litellm-diet/go.mod
+          cache-dependency-path: litellm-diet/go.sum
+
+      - name: Formatting
+        run: make fmt-check
+
+      - name: Module tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.13.2
+          working-directory: litellm-diet
+
+      - name: Tests
+        run: go test -race -cover ./...
+
+      - name: Integration tests
+        run: go test -race -p 1 -tags=integration ./...
+
+      - name: Vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

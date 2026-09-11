@@ -1,0 +1,7 @@
+/servidor
+bin/
+dist/
+coverage.out
+*.test
+*.prof
+.env

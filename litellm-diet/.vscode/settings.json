@@ -1,0 +1,6 @@
+{
+  "go.alternateTools": {
+    "dlv": "${env:HOME}/go/bin/dlv"
+  },
+  "go.toolsManagement.autoUpdate": true
+}

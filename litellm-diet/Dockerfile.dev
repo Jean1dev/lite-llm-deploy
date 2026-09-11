@@ -1,0 +1,16 @@
+FROM golang:1.27-alpine
+
+RUN apk add --no-cache git make curl build-base
+
+WORKDIR /app
+
+ENV CGO_ENABLED=0 \
+    GOCACHE=/cache/go-build \
+    GOMODCACHE=/cache/go-mod
+
+COPY go.mod ./
+RUN go mod download
+
+COPY . .
+
+CMD ["sleep", "infinity"]
