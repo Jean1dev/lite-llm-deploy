@@ -57,7 +57,10 @@ func TestRemoveFieldsKeepsOthers(t *testing.T) {
 	}
 }
 
+var raceEnabled bool
+
 func TestExtractModelAllocDoesNotGrowWithPrompt(t *testing.T) {
+	const largePrompt = 256 * 1024
 	small := testing.Benchmark(func(b *testing.B) {
 		body := bodyWithPrompt(2048)
 		for i := 0; i < b.N; i++ {
@@ -67,13 +70,19 @@ func TestExtractModelAllocDoesNotGrowWithPrompt(t *testing.T) {
 		}
 	})
 	large := testing.Benchmark(func(b *testing.B) {
-		body := bodyWithPrompt(256 * 1024)
+		body := bodyWithPrompt(largePrompt)
 		for i := 0; i < b.N; i++ {
 			if _, err := ExtractModel(body); err != nil {
 				b.Fatal(err)
 			}
 		}
 	})
+	if large.AllocedBytesPerOp() >= int64(largePrompt)/2 {
+		t.Fatalf("allocated the prompt: small=%d large=%d", small.AllocedBytesPerOp(), large.AllocedBytesPerOp())
+	}
+	if raceEnabled {
+		return
+	}
 	if large.AllocedBytesPerOp() > small.AllocedBytesPerOp()*3 && large.AllocedBytesPerOp() > 4096 {
 		t.Fatalf("allocation grew with prompt: small=%d large=%d", small.AllocedBytesPerOp(), large.AllocedBytesPerOp())
 	}
