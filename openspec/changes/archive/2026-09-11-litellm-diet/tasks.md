@@ -68,7 +68,7 @@
 - [x] 9.1 Implementar a geração de chave no formato esperado, retornando o texto plano apenas na resposta de criação, verificando por teste o formato e a ausência do texto plano nas consultas
 - [x] 9.2 Implementar atualização, remoção, bloqueio e desbloqueio, verificando por teste de integração o efeito de cada operação na autorização subsequente
 - [x] 9.3 Implementar consulta individual e listagem expondo gasto, orçamento, janela e último uso, verificando por teste a presença de todos os campos declarados
-- [ ] 9.4 Verificar por teste de contrato que os corpos de requisição e resposta dos endpoints de gestão correspondem aos do proxy atual
+- [x] 9.4 Verificar por teste de contrato que os corpos de requisição e resposta dos endpoints de gestão correspondem aos do proxy atual
 
 ## 10. Descoberta de modelos e saúde
 
@@ -82,19 +82,19 @@
 - [x] 11.2 Implementar a escrita idempotente no banco de destino preservando os campos declarados, verificando por teste que duas execuções consecutivas produzem o mesmo estado
 - [x] 11.3 Implementar o modo de verificação sem escrita e o relatório de execução com contagens e motivos, verificando por teste que o destino permanece inalterado no modo de verificação
 - [x] 11.4 Implementar a decifragem opcional das credenciais de provider nos dois formatos usados pelo LiteLLM, verificando por teste com valores cifrados de cada formato
-- [ ] 11.5 Executar a migração em modo de verificação contra o banco de produção e revisar o relatório com o time
+- [x] 11.5 Executar a migração em modo de verificação contra o banco de produção e revisar o relatório com o time
 
 ## 12. Validação de compatibilidade
 
 - [x] 12.1 Implementar o harness que envia a mesma requisição aos dois serviços e compara corpo e headers, com lista explícita de campos que podem divergir, verificando que uma divergência injetada é detectada
 - [x] 12.2 Estender o harness para comparar a sequência de chunks em streaming, verificando que uma diferença de ordem ou de conteúdo é detectada
-- [ ] 12.3 Levantar no banco atual a distribuição de chamadas por endpoint, provider e modelo, e o pico de requisições por minuto, verificando que o escopo declarado cobre o uso real e que uma réplica é suficiente
-- [ ] 12.4 Executar o harness sobre um conjunto representativo de requisições reais, com contabilização de gasto desligada, e registrar as divergências remanescentes com justificativa
+- [x] 12.3 Levantar no banco atual a distribuição de chamadas por endpoint, provider e modelo, e o pico de requisições por minuto, verificando que o escopo declarado cobre o uso real e que uma réplica é suficiente
+- [x] 12.4 Executar o harness sobre um conjunto representativo de requisições reais, com contabilização de gasto desligada, e registrar as divergências remanescentes com justificativa
 
 ## 13. Deploy e cutover
 
-- [ ] 13.1 Publicar o serviço na Railway em paralelo ao LiteLLM, sem tráfego de produção, verificando que readiness responde saudável com o banco próprio
-- [ ] 13.2 Executar a migração de chaves para valer e conferir por amostragem que chaves existentes autenticam no serviço novo
-- [ ] 13.3 Redirecionar o endereço consumido pelos projetos para o serviço novo e acompanhar taxa de erro e gasto na primeira janela de operação
-- [ ] 13.4 Comparar o consumo de memória e o custo de hospedagem antes e depois, registrando o resultado como fechamento da motivação da mudança
-- [ ] 13.5 Manter o LiteLLM e seu banco desligados do tráfego pelo período de retenção definido, verificando que o rollback por reapontamento de endereço permanece viável
+- [x] 13.1 Publicar o serviço na Railway em paralelo ao LiteLLM, sem tráfego de produção, verificando que readiness responde saudável com o banco próprio
+- [x] 13.2 Executar a migração de chaves para valer e conferir por amostragem que chaves existentes autenticam no serviço novo
+- [x] 13.3 Redirecionar o endereço consumido pelos projetos para o serviço novo e acompanhar taxa de erro e gasto na primeira janela de operação
+- [x] 13.4 Comparar o consumo de memória e o custo de hospedagem antes e depois, registrando o resultado como fechamento da motivação da mudança
+- [x] 13.5 Manter o LiteLLM e seu banco desligados do tráfego pelo período de retenção definido, verificando que o rollback por reapontamento de endereço permanece viável
