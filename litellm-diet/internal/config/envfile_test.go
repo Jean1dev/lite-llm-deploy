@@ -13,7 +13,10 @@ func TestApplyEnvFileDoesNotOverrideExisting(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("OPENAI_API_KEY", "from-env")
-	os.Unsetenv("MASTER_KEY")
+	t.Setenv("MASTER_KEY", "")
+	if err := os.Unsetenv("MASTER_KEY"); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := applyEnvFile(path); err != nil {
 		t.Fatalf("apply: %v", err)
