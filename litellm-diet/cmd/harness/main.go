@@ -36,12 +36,12 @@ func run(old, neu, key string, body []byte, stream bool) error {
 	if err != nil {
 		return fmt.Errorf("old: %w", err)
 	}
-	defer ra.Body.Close()
+	defer func() { _ = ra.Body.Close() }()
 	rb, err := fire(client, neu, key, body)
 	if err != nil {
 		return fmt.Errorf("new: %w", err)
 	}
-	defer rb.Body.Close()
+	defer func() { _ = rb.Body.Close() }()
 
 	var diffs []harness.Diff
 	if stream {

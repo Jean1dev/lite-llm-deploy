@@ -144,7 +144,7 @@ func ConvertRequest(body []byte) ([]byte, error) {
 			decls = append(decls, map[string]any{
 				"name":        t.Function.Name,
 				"description": t.Function.Description,
-				"parameters":  json.RawMessage(t.Function.Parameters),
+				"parameters":  t.Function.Parameters,
 			})
 		}
 		dst.Tools = []geminiTools{{FunctionDeclarations: decls}}

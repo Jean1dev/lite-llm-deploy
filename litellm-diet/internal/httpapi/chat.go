@@ -122,7 +122,7 @@ func (s *Server) forwardOpenAI(w http.ResponseWriter, ctx context.Context, k key
 		writeError(w, http.StatusBadGateway, "api_error", "502", err.Error())
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		s.forwardProviderError(w, resp)
@@ -196,7 +196,7 @@ func (s *Server) forwardAnthropic(w http.ResponseWriter, ctx context.Context, k 
 		writeError(w, http.StatusBadGateway, "api_error", "502", err.Error())
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		s.forwardProviderError(w, resp)
 		return
@@ -242,7 +242,7 @@ func (s *Server) forwardGemini(w http.ResponseWriter, ctx context.Context, k key
 		writeError(w, http.StatusBadGateway, "api_error", "502", err.Error())
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		s.forwardProviderError(w, resp)
 		return

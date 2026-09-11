@@ -255,7 +255,7 @@ func keyResponse(k key.Key, plain string) map[string]any {
 }
 
 func decodeBody(r *http.Request, dest any) error {
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		return err

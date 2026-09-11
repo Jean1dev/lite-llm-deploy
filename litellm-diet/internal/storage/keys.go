@@ -160,7 +160,7 @@ func (r *Repository) AddSpend(ctx context.Context, items []SpendDelta) error {
 	if err != nil {
 		return fmt.Errorf("begin spend transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	const add = `UPDATE keys SET spend = spend + $2, last_active = $3, updated_at = now() WHERE hash = $1`
 	const reset = `UPDATE keys SET spend = $2, last_active = $3, budget_reset_at = $4, updated_at = now() WHERE hash = $1`

@@ -37,9 +37,17 @@ func ConvertStream(r io.Reader, clientModel string, includeUsage bool, emit func
 	return promptTokens, completionTokens, sc.Err()
 }
 
-func emitChunk(payload []byte, id, model string, roleSent *bool, includeUsage bool, emit func([]byte) error) (int, int, error) {
+func decodeChunk(payload []byte) (geminiResp, bool) {
 	var src geminiResp
 	if err := json.Unmarshal(payload, &src); err != nil {
+		return geminiResp{}, false
+	}
+	return src, true
+}
+
+func emitChunk(payload []byte, id, model string, roleSent *bool, includeUsage bool, emit func([]byte) error) (int, int, error) {
+	src, ok := decodeChunk(payload)
+	if !ok {
 		return 0, 0, nil
 	}
 	if !*roleSent {
