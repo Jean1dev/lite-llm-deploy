@@ -3,11 +3,14 @@ package migrate
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/key"
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/storage"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+var ErrSourceNotConfigured = fmt.Errorf("source database not configured")
 
 type Report struct {
 	Read    int      `json:"read"`
@@ -54,6 +57,29 @@ func Run(ctx context.Context, source, dest *pgxpool.Pool, repo *storage.Reposito
 		}
 	}
 	return rep, nil
+}
+
+func FromSource(ctx context.Context, sourceDSN string, dest *pgxpool.Pool, repo *storage.Repository, opt Options) (Report, error) {
+	sourceDSN = strings.TrimSpace(sourceDSN)
+	if sourceDSN == "" {
+		return Report{}, ErrSourceNotConfigured
+	}
+	source, err := storage.Open(ctx, sourceDSN)
+	if err != nil {
+		return Report{}, fmt.Errorf("source: %w", err)
+	}
+	defer source.Close()
+	return Run(ctx, source, dest, repo, opt)
+}
+
+type Importer struct {
+	SourceDSN string
+	Dest      *pgxpool.Pool
+	Repo      *storage.Repository
+}
+
+func (i Importer) Import(ctx context.Context, dryRun bool) (Report, error) {
+	return FromSource(ctx, i.SourceDSN, i.Dest, i.Repo, Options{DryRun: dryRun})
 }
 
 func indexDest(ctx context.Context, repo *storage.Repository) (map[string]key.Key, error) {

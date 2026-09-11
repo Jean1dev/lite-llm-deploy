@@ -25,6 +25,7 @@ type Config struct {
 	MemoryLimit        int64
 	Providers          map[provider.ID]Provider
 	DatabaseURL        string
+	SourceDatabaseURL  string
 	MasterKey          string
 	KeyRefreshInterval time.Duration
 	SpendFlushInterval time.Duration
@@ -63,6 +64,7 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	sourceDatabaseURL := strings.TrimSpace(os.Getenv("LITELLM_DATABASE_URL"))
 	keyRefresh, err := readDuration("KEY_REFRESH_INTERVAL", defaultKeyRefresh)
 	if err != nil {
 		return Config{}, err
@@ -78,6 +80,7 @@ func Load() (Config, error) {
 		MemoryLimit:        mem,
 		Providers:          providers,
 		DatabaseURL:        databaseURL,
+		SourceDatabaseURL:  sourceDatabaseURL,
 		MasterKey:          masterKey,
 		KeyRefreshInterval: keyRefresh,
 		SpendFlushInterval: spendFlush,

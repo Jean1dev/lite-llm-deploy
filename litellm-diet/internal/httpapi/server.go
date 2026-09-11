@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/catalog"
@@ -19,33 +20,38 @@ import (
 const shutdownTimeout = 15 * time.Second
 
 type Dependencies struct {
-	Port       int
-	MasterKey  string
-	Providers  map[provider.ID]config.Provider
-	Catalog    catalog.Catalog
-	Map        *memory.Map
-	Aggregator *memory.Aggregator
-	Repo       *storage.Repository
-	Client     *http.Client
-	Ready      func(context.Context) error
-	Now        func() time.Time
-	Log        *slog.Logger
+	Port              int
+	MasterKey         string
+	Providers         map[provider.ID]config.Provider
+	Catalog           catalog.Catalog
+	Map               *memory.Map
+	Aggregator        *memory.Aggregator
+	Repo              *storage.Repository
+	Client            *http.Client
+	Ready             func(context.Context) error
+	Now               func() time.Time
+	Log               *slog.Logger
+	SourceDatabaseURL string
+	Importer          keyImporter
 }
 
 type Server struct {
-	http       *http.Server
-	log        *slog.Logger
-	providers  map[provider.ID]config.Provider
-	catalog    catalog.Catalog
-	keys       *memory.Map
-	aggregator *memory.Aggregator
-	repo       *storage.Repository
-	client     *http.Client
-	master     string
-	ready      func(context.Context) error
-	now        func() time.Time
-	modelList  []byte
-	modelInfo  []byte
+	http              *http.Server
+	log               *slog.Logger
+	providers         map[provider.ID]config.Provider
+	catalog           catalog.Catalog
+	keys              *memory.Map
+	aggregator        *memory.Aggregator
+	repo              *storage.Repository
+	client            *http.Client
+	master            string
+	ready             func(context.Context) error
+	now               func() time.Time
+	modelList         []byte
+	modelInfo         []byte
+	sourceDatabaseURL string
+	importer          keyImporter
+	migrateMu         sync.Mutex
 }
 
 func NewServer(dep Dependencies) (*Server, error) {
@@ -56,16 +62,18 @@ func NewServer(dep Dependencies) (*Server, error) {
 		dep.Now = time.Now
 	}
 	s := &Server{
-		log:        dep.Log,
-		providers:  dep.Providers,
-		catalog:    dep.Catalog,
-		keys:       dep.Map,
-		aggregator: dep.Aggregator,
-		repo:       dep.Repo,
-		client:     dep.Client,
-		master:     dep.MasterKey,
-		ready:      dep.Ready,
-		now:        dep.Now,
+		log:               dep.Log,
+		providers:         dep.Providers,
+		catalog:           dep.Catalog,
+		keys:              dep.Map,
+		aggregator:        dep.Aggregator,
+		repo:              dep.Repo,
+		client:            dep.Client,
+		master:            dep.MasterKey,
+		ready:             dep.Ready,
+		now:               dep.Now,
+		sourceDatabaseURL: dep.SourceDatabaseURL,
+		importer:          dep.Importer,
 	}
 	if err := s.prepareCatalog(); err != nil {
 		return nil, fmt.Errorf("prepare catalog: %w", err)
@@ -104,6 +112,7 @@ func (s *Server) register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /key/unblock", s.unblockKey)
 	mux.HandleFunc("GET /key/info", s.keyInfo)
 	mux.HandleFunc("GET /key/list", s.listKeys)
+	mux.HandleFunc("POST /admin/migrate-keys", s.migrateKeys)
 }
 
 func (s *Server) Handler() http.Handler {

@@ -13,6 +13,7 @@ services:
       MEMORY_LIMIT: 256MiB
       GOMEMLIMIT: 256MiB
       DATABASE_URL: postgres://diet:diet@db:5432/diet?sslmode=disable
+      LITELLM_DATABASE_URL: ${LITELLM_DATABASE_URL:-}
       OPENAI_API_KEY: sk-dev-openai
       ANTHROPIC_API_KEY: sk-dev-anthropic
       GEMINI_API_KEY: sk-dev-gemini

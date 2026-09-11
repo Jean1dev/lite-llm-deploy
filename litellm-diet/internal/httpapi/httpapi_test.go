@@ -16,6 +16,7 @@ import (
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/config"
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/key"
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/memory"
+	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/migrate"
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/provider"
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/storage"
 )
@@ -252,5 +253,154 @@ func TestReadinessReflectsDatabase(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health/ready", nil))
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("ready unavailable = %d", rec.Code)
+	}
+}
+
+type fakeImporter struct {
+	repo     *fakeRepo
+	imported key.Key
+	lastDry  bool
+	err      error
+}
+
+func (f *fakeImporter) Import(_ context.Context, dryRun bool) (migrate.Report, error) {
+	f.lastDry = dryRun
+	if f.err != nil {
+		return migrate.Report{}, f.err
+	}
+	if !dryRun && f.repo != nil {
+		f.repo.keys = append(f.repo.keys, f.imported)
+	}
+	return migrate.Report{Read: 1, Created: 1, DryRun: dryRun}, nil
+}
+
+func TestMigrateKeysRequiresMaster(t *testing.T) {
+	srv, token := testServer(t, "http://127.0.0.1:9")
+	cases := []struct {
+		name   string
+		auth   string
+		status int
+	}{
+		{name: "missing", auth: "", status: http.StatusUnauthorized},
+		{name: "virtual key", auth: "Bearer " + token, status: http.StatusUnauthorized},
+		{name: "unknown", auth: "Bearer sk-missing", status: http.StatusUnauthorized},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/admin/migrate-keys", nil)
+			if c.auth != "" {
+				req.Header.Set("Authorization", c.auth)
+			}
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+			if rec.Code != c.status {
+				t.Fatalf("status = %d, want %d body=%s", rec.Code, c.status, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestMigrateKeysRejectsMissingSource(t *testing.T) {
+	srv, _ := testServer(t, "http://127.0.0.1:9")
+	req := httptest.NewRequest(http.MethodPost, "/admin/migrate-keys", nil)
+	req.Header.Set("Authorization", "Bearer sk-master")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503 body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestMigrateKeysImportsAndReloads(t *testing.T) {
+	srv, _ := testServer(t, "http://127.0.0.1:9")
+	_, hash, err := key.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	mapReader := &fakeRepo{}
+	m := memory.NewMap(mapReader)
+	if err := m.Load(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	imp := &fakeImporter{
+		repo:     mapReader,
+		imported: key.Key{Hash: hash, Alias: "migrated", CreatedAt: now, UpdatedAt: now},
+	}
+	srv.keys = m
+	srv.importer = imp
+	srv.sourceDatabaseURL = "postgres://lite@db/railway"
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/migrate-keys", nil)
+	req.Header.Set("Authorization", "Bearer sk-master")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if imp.lastDry {
+		t.Fatal("expected write import")
+	}
+	if _, ok := srv.keys.Lookup(hash); !ok {
+		t.Fatal("imported key not loaded")
+	}
+}
+
+func TestMigrateKeysDryRunDoesNotReload(t *testing.T) {
+	srv, _ := testServer(t, "http://127.0.0.1:9")
+	_, hash, err := key.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mapReader := &fakeRepo{}
+	m := memory.NewMap(mapReader)
+	if err := m.Load(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	srv.keys = m
+	srv.sourceDatabaseURL = "postgres://lite@db/railway"
+	srv.importer = &fakeImporter{
+		repo:     mapReader,
+		imported: key.Key{Hash: hash},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/migrate-keys?dry_run=true", nil)
+	req.Header.Set("Authorization", "Bearer sk-master")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, ok := srv.keys.Lookup(hash); ok {
+		t.Fatal("dry-run must not load keys")
+	}
+}
+
+func TestMigrateKeysRejectsConcurrentRun(t *testing.T) {
+	srv, _ := testServer(t, "http://127.0.0.1:9")
+	srv.importer = &fakeImporter{}
+	srv.sourceDatabaseURL = "postgres://lite@db/railway"
+	srv.migrateMu.Lock()
+	t.Cleanup(srv.migrateMu.Unlock)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/migrate-keys", nil)
+	req.Header.Set("Authorization", "Bearer sk-master")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestMigrateKeysReportsImportFailure(t *testing.T) {
+	srv, _ := testServer(t, "http://127.0.0.1:9")
+	srv.importer = &fakeImporter{err: io.EOF}
+	srv.sourceDatabaseURL = "postgres://lite@db/railway"
+	req := httptest.NewRequest(http.MethodPost, "/admin/migrate-keys", nil)
+	req.Header.Set("Authorization", "Bearer sk-master")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502 body=%s", rec.Code, rec.Body.String())
 	}
 }

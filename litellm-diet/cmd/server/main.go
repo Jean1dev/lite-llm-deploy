@@ -13,6 +13,7 @@ import (
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/config"
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/httpapi"
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/memory"
+	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/migrate"
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/storage"
 )
 
@@ -70,15 +71,17 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	go ag.FlushPeriodically(ctx, cfg.SpendFlushInterval)
 
 	srv, err := httpapi.NewServer(httpapi.Dependencies{
-		Port:       cfg.Port,
-		MasterKey:  cfg.MasterKey,
-		Providers:  cfg.Providers,
-		Catalog:    cat,
-		Map:        keys,
-		Aggregator: ag,
-		Repo:       repo,
-		Ready:      func(c context.Context) error { return pool.Ping(c) },
-		Log:        logger,
+		Port:              cfg.Port,
+		MasterKey:         cfg.MasterKey,
+		Providers:         cfg.Providers,
+		Catalog:           cat,
+		Map:               keys,
+		Aggregator:        ag,
+		Repo:              repo,
+		Ready:             func(c context.Context) error { return pool.Ping(c) },
+		Log:               logger,
+		SourceDatabaseURL: cfg.SourceDatabaseURL,
+		Importer:          migrate.Importer{SourceDSN: cfg.SourceDatabaseURL, Dest: pool, Repo: repo},
 	})
 	if err != nil {
 		return err

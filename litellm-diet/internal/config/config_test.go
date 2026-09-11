@@ -62,6 +62,9 @@ func TestLoadDefaults(t *testing.T) {
 	if c.MemoryLimit != 256<<20 {
 		t.Errorf("memory = %d, want %d", c.MemoryLimit, 256<<20)
 	}
+	if c.SourceDatabaseURL != "" {
+		t.Errorf("source database url = %q, want empty", c.SourceDatabaseURL)
+	}
 }
 
 func TestLoadEnvValues(t *testing.T) {
@@ -69,6 +72,7 @@ func TestLoadEnvValues(t *testing.T) {
 	t.Setenv("PORT", "8080")
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("MEMORY_LIMIT", "512MiB")
+	t.Setenv("LITELLM_DATABASE_URL", "postgres://lite:lite@postgres.railway.internal:5432/railway")
 
 	c, err := Load()
 	if err != nil {
@@ -82,6 +86,9 @@ func TestLoadEnvValues(t *testing.T) {
 	}
 	if c.MemoryLimit != 512<<20 {
 		t.Errorf("memory = %d, want %d", c.MemoryLimit, 512<<20)
+	}
+	if c.SourceDatabaseURL != "postgres://lite:lite@postgres.railway.internal:5432/railway" {
+		t.Errorf("source database url = %q", c.SourceDatabaseURL)
 	}
 }
 
