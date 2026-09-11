@@ -3,12 +3,12 @@ package storage
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
+	"io/fs"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/migrations"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -20,11 +20,11 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 
 type Migrator struct {
 	pool *pgxpool.Pool
-	dir  string
+	fs   fs.FS
 }
 
-func NewMigrator(pool *pgxpool.Pool, dir string) *Migrator {
-	return &Migrator{pool: pool, dir: dir}
+func NewMigrator(pool *pgxpool.Pool) *Migrator {
+	return &Migrator{pool: pool, fs: migrations.FS}
 }
 
 func (m *Migrator) Apply(ctx context.Context) error {
@@ -43,11 +43,7 @@ func (m *Migrator) Apply(ctx context.Context) error {
 		if f.version <= current {
 			continue
 		}
-		body, err := os.ReadFile(f.path)
-		if err != nil {
-			return fmt.Errorf("read migration %s: %w", f.path, err)
-		}
-		if _, err := m.pool.Exec(ctx, string(body)); err != nil {
+		if _, err := m.pool.Exec(ctx, f.body); err != nil {
 			return fmt.Errorf("apply migration %d: %w", f.version, err)
 		}
 		if _, err := m.pool.Exec(ctx, `INSERT INTO schema_migrations (version) VALUES ($1)`, f.version); err != nil {
@@ -79,14 +75,10 @@ func (m *Migrator) Rollback(ctx context.Context) error {
 			break
 		}
 	}
-	if target.path == "" {
+	if target.body == "" {
 		return fmt.Errorf("down file for version %d missing", current)
 	}
-	body, err := os.ReadFile(target.path)
-	if err != nil {
-		return fmt.Errorf("read migration %s: %w", target.path, err)
-	}
-	if _, err := m.pool.Exec(ctx, string(body)); err != nil {
+	if _, err := m.pool.Exec(ctx, target.body); err != nil {
 		return fmt.Errorf("rollback migration %d: %w", current, err)
 	}
 	if _, err := m.pool.Exec(ctx, `DELETE FROM schema_migrations WHERE version = $1`, current); err != nil {
@@ -115,13 +107,14 @@ func (m *Migrator) version(ctx context.Context) (int, error) {
 
 type migrationFile struct {
 	version int
-	path    string
+	name    string
+	body    string
 }
 
 func (m *Migrator) files(suffix string) ([]migrationFile, error) {
-	entries, err := os.ReadDir(m.dir)
+	entries, err := fs.ReadDir(m.fs, ".")
 	if err != nil {
-		return nil, fmt.Errorf("read migrations dir %q: %w", m.dir, err)
+		return nil, fmt.Errorf("read embedded migrations: %w", err)
 	}
 	out := make([]migrationFile, 0, len(entries))
 	for _, e := range entries {
@@ -132,28 +125,12 @@ func (m *Migrator) files(suffix string) ([]migrationFile, error) {
 		if err != nil {
 			return nil, fmt.Errorf("version of %s: %w", e.Name(), err)
 		}
-		out = append(out, migrationFile{version: version, path: filepath.Join(m.dir, e.Name())})
+		raw, err := fs.ReadFile(m.fs, e.Name())
+		if err != nil {
+			return nil, fmt.Errorf("read migration %s: %w", e.Name(), err)
+		}
+		out = append(out, migrationFile{version: version, name: e.Name(), body: string(raw)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].version < out[j].version })
 	return out, nil
-}
-
-func MigrationsDir() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("current directory: %w", err)
-	}
-	for {
-		candidate := filepath.Join(dir, "migrations")
-		if _, err := os.Stat(candidate); err == nil {
-			if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-				return candidate, nil
-			}
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("migrations not found from %s", dir)
-		}
-		dir = parent
-	}
 }

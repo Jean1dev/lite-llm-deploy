@@ -31,6 +31,10 @@ type Config struct {
 }
 
 func Load() (Config, error) {
+	if err := loadDotEnv(); err != nil {
+		return Config{}, err
+	}
+
 	port, err := readPort()
 	if err != nil {
 		return Config{}, err

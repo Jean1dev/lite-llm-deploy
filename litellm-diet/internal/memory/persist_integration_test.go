@@ -32,11 +32,7 @@ func testRepo(t *testing.T) (context.Context, *storage.Repository) {
 	if _, err := pool.Exec(ctx, `DROP TABLE IF EXISTS schema_migrations`); err != nil {
 		t.Fatal(err)
 	}
-	dir, err := storage.MigrationsDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := storage.NewMigrator(pool, dir).Apply(ctx); err != nil {
+	if err := storage.NewMigrator(pool).Apply(ctx); err != nil {
 		t.Fatal(err)
 	}
 	return ctx, storage.NewRepository(pool)

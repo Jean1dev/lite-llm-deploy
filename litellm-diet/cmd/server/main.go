@@ -19,7 +19,7 @@ import (
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		newLogger(slog.LevelInfo, os.Stdout).Error("invalid configuration", slog.String("err", err.Error()))
+		newLogger(slog.LevelInfo, os.Stdout).Error("invalid configuration: "+err.Error(), slog.String("err", err.Error()))
 		os.Exit(1)
 	}
 
@@ -30,7 +30,7 @@ func main() {
 	defer stop()
 
 	if err := run(ctx, cfg, logger); err != nil {
-		logger.Error("exiting after failure", slog.String("err", err.Error()))
+		logger.Error("exiting after failure: "+err.Error(), slog.String("err", err.Error()))
 		os.Exit(1)
 	}
 }
@@ -55,11 +55,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	}
 	defer pool.Close()
 
-	dir, err := storage.MigrationsDir()
-	if err != nil {
-		return err
-	}
-	if err := storage.NewMigrator(pool, dir).Apply(ctx); err != nil {
+	if err := storage.NewMigrator(pool).Apply(ctx); err != nil {
 		return err
 	}
 

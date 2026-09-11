@@ -42,11 +42,7 @@ func TestMigrationAppliesAndRollsBackOnEmptyDatabase(t *testing.T) {
 	ctx, pool := openTest(t)
 	resetSchema(t, ctx, pool)
 
-	dir, err := MigrationsDir()
-	if err != nil {
-		t.Fatalf("dir: %v", err)
-	}
-	m := NewMigrator(pool, dir)
+	m := NewMigrator(pool)
 
 	if err := m.Apply(ctx); err != nil {
 		t.Fatalf("apply: %v", err)

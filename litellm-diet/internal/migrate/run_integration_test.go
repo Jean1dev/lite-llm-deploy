@@ -35,11 +35,7 @@ func TestMigrationIdempotentAndDryRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dir, err := storage.MigrationsDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := storage.NewMigrator(pool, dir).Apply(ctx); err != nil {
+	if err := storage.NewMigrator(pool).Apply(ctx); err != nil {
 		t.Fatal(err)
 	}
 

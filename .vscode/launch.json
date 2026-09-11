@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug litellm-diet",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/litellm-diet/cmd/server",
+      "cwd": "${workspaceFolder}/litellm-diet",
+      "envFile": "${workspaceFolder}/litellm-diet/.env"
+    }
+  ]
+}

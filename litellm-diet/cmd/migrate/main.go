@@ -43,11 +43,7 @@ func run(sourceDSN, destDSN, salt string, dry bool) error {
 	}
 	defer dest.Close()
 
-	dir, err := storage.MigrationsDir()
-	if err != nil {
-		return err
-	}
-	if err := storage.NewMigrator(dest, dir).Apply(ctx); err != nil {
+	if err := storage.NewMigrator(dest).Apply(ctx); err != nil {
 		return err
 	}
 
