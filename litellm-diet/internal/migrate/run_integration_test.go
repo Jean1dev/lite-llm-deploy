@@ -106,3 +106,58 @@ VALUES
 		t.Fatalf("dest = %+v", list)
 	}
 }
+
+func TestReadSourceWithoutDeletedColumn(t *testing.T) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL not set")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	pool, err := storage.Open(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer pool.Close()
+
+	if _, err := pool.Exec(ctx, `DROP TABLE IF EXISTS "LiteLLM_VerificationToken"`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+CREATE TABLE "LiteLLM_VerificationToken" (
+	token TEXT PRIMARY KEY,
+	key_alias TEXT,
+	models TEXT[],
+	spend DOUBLE PRECISION,
+	max_budget DOUBLE PRECISION,
+	budget_duration TEXT,
+	budget_reset_at TIMESTAMPTZ,
+	last_active TIMESTAMPTZ,
+	expires TIMESTAMPTZ,
+	blocked BOOLEAN,
+	created_at TIMESTAMPTZ,
+	updated_at TIMESTAMPTZ
+)`); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+INSERT INTO "LiteLLM_VerificationToken"
+(token, key_alias, models, spend, max_budget, budget_duration, budget_reset_at, last_active, expires, blocked, created_at, updated_at)
+VALUES
+('hash-ok', 'prod', '{openai/*}', 12.5, 100, '30d', now() + interval '10 days', now(), now() + interval '1 year', false, now(), now())
+`); err != nil {
+		t.Fatalf("insert source: %v", err)
+	}
+
+	keys, skipped, err := ReadSource(ctx, pool)
+	if err != nil {
+		t.Fatalf("read source: %v", err)
+	}
+	if len(skipped) != 0 {
+		t.Fatalf("skipped = %v", skipped)
+	}
+	if len(keys) != 1 || keys[0].Hash != "hash-ok" {
+		t.Fatalf("keys = %+v", keys)
+	}
+}

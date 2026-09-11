@@ -25,25 +25,18 @@ type sourceKey struct {
 	Deleted        bool
 }
 
-func ReadSource(ctx context.Context, pool *pgxpool.Pool) ([]key.Key, []string, error) {
-	const q = `
-SELECT
-	token,
-	COALESCE(key_alias, ''),
-	COALESCE(models, '{}'),
-	COALESCE(spend, 0),
-	max_budget,
-	COALESCE(budget_duration, ''),
-	budget_reset_at,
-	COALESCE(last_active, updated_at),
-	expires,
-	COALESCE(blocked, false),
-	COALESCE(created_at, now()),
-	COALESCE(updated_at, now()),
-	COALESCE(deleted, false)
-FROM "LiteLLM_VerificationToken"`
+type sourceFlags struct {
+	deleted    bool
+	lastActive bool
+}
 
-	rows, err := pool.Query(ctx, q)
+func ReadSource(ctx context.Context, pool *pgxpool.Pool) ([]key.Key, []string, error) {
+	flags, err := inspectSource(ctx, pool)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	rows, err := pool.Query(ctx, sourceQuery(flags))
 	if err != nil {
 		return nil, nil, fmt.Errorf("read source keys: %w", err)
 	}
@@ -82,6 +75,64 @@ FROM "LiteLLM_VerificationToken"`
 		return nil, nil, fmt.Errorf("iterate source: %w", err)
 	}
 	return out, skipped, nil
+}
+
+func inspectSource(ctx context.Context, pool *pgxpool.Pool) (sourceFlags, error) {
+	var flags sourceFlags
+	deleted, err := sourceHasColumn(ctx, pool, "deleted")
+	if err != nil {
+		return sourceFlags{}, err
+	}
+	flags.deleted = deleted
+	lastActive, err := sourceHasColumn(ctx, pool, "last_active")
+	if err != nil {
+		return sourceFlags{}, err
+	}
+	flags.lastActive = lastActive
+	return flags, nil
+}
+
+func sourceHasColumn(ctx context.Context, pool *pgxpool.Pool, name string) (bool, error) {
+	var exists bool
+	err := pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM pg_attribute
+			WHERE attrelid = '"LiteLLM_VerificationToken"'::regclass
+			  AND attname = $1
+			  AND attnum > 0
+			  AND NOT attisdropped
+		)`, name).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("inspect source column %s: %w", name, err)
+	}
+	return exists, nil
+}
+
+func sourceQuery(f sourceFlags) string {
+	lastActive := "updated_at"
+	if f.lastActive {
+		lastActive = "COALESCE(last_active, updated_at)"
+	}
+	deleted := "false"
+	if f.deleted {
+		deleted = "COALESCE(deleted, false)"
+	}
+	return `SELECT
+	token,
+	COALESCE(key_alias, ''),
+	COALESCE(models, '{}'),
+	COALESCE(spend, 0),
+	max_budget,
+	COALESCE(budget_duration, ''),
+	budget_reset_at,
+	` + lastActive + `,
+	expires,
+	COALESCE(blocked, false),
+	COALESCE(created_at, now()),
+	COALESCE(updated_at, now()),
+	` + deleted + `
+FROM "LiteLLM_VerificationToken"`
 }
 
 func skipReason(o sourceKey) string {
