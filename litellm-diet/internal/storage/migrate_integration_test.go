@@ -33,6 +33,9 @@ func resetSchema(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	if _, err := pool.Exec(ctx, `DROP TABLE IF EXISTS keys CASCADE`); err != nil {
 		t.Fatalf("drop keys: %v", err)
 	}
+	if _, err := pool.Exec(ctx, `DROP TABLE IF EXISTS daily_usage CASCADE`); err != nil {
+		t.Fatalf("drop daily_usage: %v", err)
+	}
 	if _, err := pool.Exec(ctx, `DROP TABLE IF EXISTS schema_migrations CASCADE`); err != nil {
 		t.Fatalf("drop schema_migrations: %v", err)
 	}
@@ -57,8 +60,10 @@ func TestMigrationAppliesAndRollsBackOnEmptyDatabase(t *testing.T) {
 		t.Fatal("keys table was not created")
 	}
 
-	if err := m.Rollback(ctx); err != nil {
-		t.Fatalf("rollback: %v", err)
+	for i := 0; i < 2; i++ {
+		if err := m.Rollback(ctx); err != nil {
+			t.Fatalf("rollback %d: %v", i, err)
+		}
 	}
 	if err := pool.QueryRow(ctx, `SELECT EXISTS (
 		SELECT 1 FROM information_schema.tables WHERE table_name = 'keys'

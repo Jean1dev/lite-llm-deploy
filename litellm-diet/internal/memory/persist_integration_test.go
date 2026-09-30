@@ -29,6 +29,9 @@ func testRepo(t *testing.T) (context.Context, *storage.Repository) {
 	if _, err := pool.Exec(ctx, `DROP TABLE IF EXISTS keys`); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := pool.Exec(ctx, `DROP TABLE IF EXISTS daily_usage`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := pool.Exec(ctx, `DROP TABLE IF EXISTS schema_migrations`); err != nil {
 		t.Fatal(err)
 	}
@@ -120,4 +123,59 @@ type writeCounter struct {
 func (c *writeCounter) AddSpend(ctx context.Context, items []storage.SpendDelta) error {
 	c.n++
 	return c.inner.AddSpend(ctx, items)
+}
+
+func (c *writeCounter) AddUsage(ctx context.Context, items []storage.UsageDelta) error {
+	return c.inner.AddUsage(ctx, items)
+}
+
+func TestUsageAccumulatesAcrossFlushes(t *testing.T) {
+	ctx, repo := testRepo(t)
+	day := time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC)
+	ag := NewAggregator(repo, nil)
+
+	for i := 0; i < 2; i++ {
+		ag.RecordUsage(UsageEvent{Hash: "h1", Model: "openai/gpt-4o", Provider: "openai", Prompt: 10, Completion: 5, Cost: 0.5, Success: true, At: day.Add(time.Hour)})
+		ag.RecordUsage(UsageEvent{Hash: "h1", Model: "openai/gpt-4o", Provider: "openai", Success: false, At: day.Add(2 * time.Hour)})
+		if err := ag.Flush(ctx); err != nil {
+			t.Fatalf("flush %d: %v", i, err)
+		}
+	}
+	ag.RecordUsage(UsageEvent{Hash: "h2", Model: "anthropic/claude-haiku-4-5", Provider: "anthropic", Prompt: 1, Success: true, At: day.AddDate(0, 0, -10)})
+	if err := ag.Flush(ctx); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+
+	rows, err := repo.DailyUsage(ctx, day.AddDate(0, 0, -6), day, "", "")
+	if err != nil {
+		t.Fatalf("daily usage: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d, want 1 (out-of-range row must be excluded)", len(rows))
+	}
+	r := rows[0]
+	if r.PromptTokens != 20 || r.CompletionTokens != 10 || r.Requests != 4 || r.Successes != 2 || r.Failures != 2 {
+		t.Errorf("unexpected accumulated row: %+v", r)
+	}
+	if r.Spend < 0.99 || r.Spend > 1.01 {
+		t.Errorf("spend = %g, want 1", r.Spend)
+	}
+	if !r.Date.Equal(day) {
+		t.Errorf("date = %v, want %v", r.Date, day)
+	}
+
+	rows, err = repo.DailyUsage(ctx, day.AddDate(0, 0, -29), day, "h2", "")
+	if err != nil {
+		t.Fatalf("daily usage filtered: %v", err)
+	}
+	if len(rows) != 1 || rows[0].KeyHash != "h2" {
+		t.Fatalf("key filter returned %+v", rows)
+	}
+	rows, err = repo.DailyUsage(ctx, day.AddDate(0, 0, -29), day, "", "openai/gpt-4o")
+	if err != nil {
+		t.Fatalf("daily usage by model: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Model != "openai/gpt-4o" {
+		t.Fatalf("model filter returned %+v", rows)
+	}
 }
