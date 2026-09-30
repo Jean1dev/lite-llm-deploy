@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,9 +28,35 @@ type fakeRepo struct {
 
 func (r *fakeRepo) List(_ context.Context) ([]key.Key, error) { return r.keys, nil }
 
-type nullWriter struct{}
+type usageStore struct {
+	mu   sync.Mutex
+	rows []storage.UsageDelta
+}
 
-func (nullWriter) AddSpend(context.Context, []storage.SpendDelta) error { return nil }
+func (*usageStore) AddSpend(context.Context, []storage.SpendDelta) error { return nil }
+
+func (u *usageStore) AddUsage(_ context.Context, items []storage.UsageDelta) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.rows = append(u.rows, items...)
+	return nil
+}
+
+func (u *usageStore) DailyUsage(_ context.Context, from, to time.Time, keyHash, model string) ([]storage.UsageRow, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	out := make([]storage.UsageRow, 0, len(u.rows))
+	for _, r := range u.rows {
+		if r.Date.Before(from) || r.Date.After(to) {
+			continue
+		}
+		if (keyHash != "" && r.KeyHash != keyHash) || (model != "" && r.Model != model) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
 
 func testServer(t *testing.T, openaiURL string) (*Server, string) {
 	t.Helper()
@@ -48,7 +75,8 @@ func testServer(t *testing.T, openaiURL string) (*Server, string) {
 	if err := m.Load(context.Background()); err != nil {
 		t.Fatalf("load map: %v", err)
 	}
-	ag := memory.NewAggregator(nullWriter{}, m)
+	store := &usageStore{}
+	ag := memory.NewAggregator(store, m)
 	srv, err := NewServer(Dependencies{
 		Port:      0,
 		MasterKey: "sk-master",
@@ -60,6 +88,7 @@ func testServer(t *testing.T, openaiURL string) (*Server, string) {
 		Catalog:    cat,
 		Map:        m,
 		Aggregator: ag,
+		Usage:      store,
 		Ready:      func(context.Context) error { return nil },
 		Log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})

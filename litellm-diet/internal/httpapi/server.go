@@ -27,6 +27,7 @@ type Dependencies struct {
 	Map               *memory.Map
 	Aggregator        *memory.Aggregator
 	Repo              *storage.Repository
+	Usage             usageReader
 	Client            *http.Client
 	Ready             func(context.Context) error
 	Now               func() time.Time
@@ -43,6 +44,7 @@ type Server struct {
 	keys              *memory.Map
 	aggregator        *memory.Aggregator
 	repo              *storage.Repository
+	usage             usageReader
 	client            *http.Client
 	master            string
 	ready             func(context.Context) error
@@ -61,6 +63,9 @@ func NewServer(dep Dependencies) (*Server, error) {
 	if dep.Now == nil {
 		dep.Now = time.Now
 	}
+	if dep.Usage == nil && dep.Repo != nil {
+		dep.Usage = dep.Repo
+	}
 	s := &Server{
 		log:               dep.Log,
 		providers:         dep.Providers,
@@ -68,6 +73,7 @@ func NewServer(dep Dependencies) (*Server, error) {
 		keys:              dep.Map,
 		aggregator:        dep.Aggregator,
 		repo:              dep.Repo,
+		usage:             dep.Usage,
 		client:            dep.Client,
 		master:            dep.MasterKey,
 		ready:             dep.Ready,
@@ -113,6 +119,8 @@ func (s *Server) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /key/info", s.keyInfo)
 	mux.HandleFunc("GET /key/list", s.listKeys)
 	mux.HandleFunc("POST /admin/migrate-keys", s.migrateKeys)
+
+	mux.HandleFunc("GET /user/daily/activity", s.dailyActivity)
 }
 
 func (s *Server) Handler() http.Handler {

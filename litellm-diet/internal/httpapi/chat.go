@@ -20,6 +20,7 @@ import (
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/gemini"
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/jsonutil"
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/key"
+	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/memory"
 	"github.com/Jean1dev/lite-llm-deploy/litellm-diet/internal/provider"
 )
 
@@ -119,13 +120,13 @@ func (s *Server) forwardOpenAI(w http.ResponseWriter, ctx context.Context, k key
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "api_error", "502", err.Error())
+		s.providerFailure(w, k, model, err.Error())
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		s.forwardProviderError(w, resp)
+		s.forwardProviderError(w, resp, k, model)
 		return
 	}
 
@@ -142,12 +143,12 @@ func (s *Server) forwardOpenAI(w http.ResponseWriter, ctx context.Context, k key
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "api_error", "502", "unreadable provider response")
+		s.providerFailure(w, k, model, "unreadable provider response")
 		return
 	}
 	respBody, err = jsonutil.ReplaceStringField(respBody, "model", model)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "api_error", "502", "invalid provider response")
+		s.providerFailure(w, k, model, "invalid provider response")
 		return
 	}
 	s.writeProviderJSON(w, resp, k, model, callID, entry, respBody)
@@ -193,12 +194,12 @@ func (s *Server) forwardAnthropic(w http.ResponseWriter, ctx context.Context, k 
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "api_error", "502", err.Error())
+		s.providerFailure(w, k, model, err.Error())
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
-		s.forwardProviderError(w, resp)
+		s.forwardProviderError(w, resp, k, model)
 		return
 	}
 	if streaming {
@@ -209,12 +210,12 @@ func (s *Server) forwardAnthropic(w http.ResponseWriter, ctx context.Context, k 
 	}
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "api_error", "502", "unreadable provider response")
+		s.providerFailure(w, k, model, "unreadable provider response")
 		return
 	}
 	translated, err := anthropic.ConvertResponse(respBody, model)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "api_error", "502", err.Error())
+		s.providerFailure(w, k, model, err.Error())
 		return
 	}
 	s.writeProviderJSON(w, resp, k, model, callID, entry, translated)
@@ -239,12 +240,12 @@ func (s *Server) forwardGemini(w http.ResponseWriter, ctx context.Context, k key
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.client.Do(req)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "api_error", "502", err.Error())
+		s.providerFailure(w, k, model, err.Error())
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
-		s.forwardProviderError(w, resp)
+		s.forwardProviderError(w, resp, k, model)
 		return
 	}
 	if streaming {
@@ -255,12 +256,12 @@ func (s *Server) forwardGemini(w http.ResponseWriter, ctx context.Context, k key
 	}
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "api_error", "502", "unreadable provider response")
+		s.providerFailure(w, k, model, "unreadable provider response")
 		return
 	}
 	translated, err := gemini.ConvertResponse(respBody, model)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "api_error", "502", err.Error())
+		s.providerFailure(w, k, model, err.Error())
 		return
 	}
 	s.writeProviderJSON(w, resp, k, model, callID, entry, translated)
@@ -297,6 +298,7 @@ func (s *Server) translatedStream(w http.ResponseWriter, resp *http.Response, k 
 		return nil
 	})
 	if err != nil && !errors.Is(err, io.EOF) {
+		s.recordFailure(k, model)
 		return
 	}
 	s.recordCost(k, model, responseUsage{PromptTokens: prompt, CompletionTokens: completion})
@@ -346,7 +348,8 @@ func (s *Server) forwardStream(w http.ResponseWriter, resp *http.Response, k key
 	flusher.Flush()
 }
 
-func (s *Server) forwardProviderError(w http.ResponseWriter, resp *http.Response) {
+func (s *Server) forwardProviderError(w http.ResponseWriter, resp *http.Response, k key.Key, model string) {
+	s.recordFailure(k, model)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		writeError(w, resp.StatusCode, "api_error", fmt.Sprintf("%d", resp.StatusCode), "provider error")
@@ -368,14 +371,47 @@ func (s *Server) forwardProviderError(w http.ResponseWriter, resp *http.Response
 }
 
 func (s *Server) recordCost(k key.Key, model string, usage responseUsage) float64 {
+	now := s.now()
 	value, err := s.catalog.Cost(model, catalog.Usage{PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens})
 	if err != nil {
 		s.log.Warn("cost not computable", "model", model, "reason", err.Error())
-		s.aggregator.Record(k.Hash, 0, s.now())
-		return 0
+		value = 0
 	}
-	s.aggregator.Record(k.Hash, value, s.now())
+	s.aggregator.Record(k.Hash, value, now)
+	s.aggregator.RecordUsage(memory.UsageEvent{
+		Hash:       k.Hash,
+		Model:      model,
+		Provider:   providerOf(model),
+		Prompt:     usage.PromptTokens,
+		Completion: usage.CompletionTokens,
+		Cost:       value,
+		Success:    true,
+		At:         now,
+	})
 	return value
+}
+
+func (s *Server) recordFailure(k key.Key, model string) {
+	s.aggregator.RecordUsage(memory.UsageEvent{
+		Hash:     k.Hash,
+		Model:    model,
+		Provider: providerOf(model),
+		Success:  false,
+		At:       s.now(),
+	})
+}
+
+func (s *Server) providerFailure(w http.ResponseWriter, k key.Key, model, msg string) {
+	s.recordFailure(k, model)
+	writeError(w, http.StatusBadGateway, "api_error", "502", msg)
+}
+
+func providerOf(model string) string {
+	id, _, err := provider.Split(model)
+	if err != nil {
+		return ""
+	}
+	return string(id)
 }
 
 func newCallID() string {

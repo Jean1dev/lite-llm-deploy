@@ -28,6 +28,9 @@ func TestMigrationIdempotentAndDryRun(t *testing.T) {
 	if _, err := pool.Exec(ctx, `DROP TABLE IF EXISTS keys`); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := pool.Exec(ctx, `DROP TABLE IF EXISTS daily_usage`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := pool.Exec(ctx, `DROP TABLE IF EXISTS schema_migrations`); err != nil {
 		t.Fatal(err)
 	}
